@@ -236,10 +236,31 @@ static bool cpufeature_svpbmt_check_func(unsigned int stage)
 	return ret;
 }
 
+static bool cpufeature_cmo_check_func(unsigned int stage)
+{
+	bool ret = false;
+
+	switch (stage) {
+	case RISCV_ALTERNATIVES_EARLY_BOOT:
+		return false;
+	case RISCV_ALTERNATIVES_BOOT:
+//		return cpufeature_svpbmt_check_fdt();
+	default:
+return true;
+//		return cpufeature_svpbmt_check_of();
+	}
+
+	return ret;
+}
+
 static const struct cpufeature_info cpufeature_list[CPUFEATURE_NUMBER] = {
 	{
 		.name = "svpbmt",
 		.check_func = cpufeature_svpbmt_check_func
+	},
+	{
+		.name = "cmo",
+		.check_func = cpufeature_cmo_check_func
 	},
 };
 
