@@ -27,6 +27,11 @@
 		stdout-path = "serial0:115200n8";
 	};
 
+	memory@40000000 {
+		device_type = "memory";
+		reg = <0x40000000 0x40000000>;
+	};
+
 	hdmi_connector: connector {
 		compatible = "hdmi-connector";
 		type = "a";
