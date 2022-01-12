@@ -174,9 +174,9 @@
 			#address-cells = <0>;
 			reg = <0x2000000 0x800>;
 			clocks = <&ccu CLK_APB0>,
-				 <&osc24M>,
-				 <&rtc CLK_OSC32K>;
-			clock-names = "apb", "hosc", "losc";
+				 <&osc24M>/*,
+				 <&rtc CLK_OSC32K>*/;
+			clock-names = "apb", "hosc"/*, "losc"*/;
 			gpio-controller;
 			#gpio-cells = <3>;
 			interrupts = <85 IRQ_TYPE_LEVEL_HIGH>,
