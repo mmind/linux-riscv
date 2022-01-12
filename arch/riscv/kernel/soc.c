@@ -5,6 +5,7 @@
 #include <linux/init.h>
 #include <linux/libfdt.h>
 #include <linux/pgtable.h>
+#include <asm/alternative.h>
 #include <asm/soc.h>
 
 /*
@@ -16,6 +17,8 @@ void __init soc_early_init(void)
 	void (*early_fn)(const void *fdt);
 	const struct of_device_id *s;
 	const void *fdt = dtb_early_va;
+
+	apply_boot_alternatives();
 
 	for (s = (void *)&__soc_early_init_table_start;
 	     (void *)s < (void *)&__soc_early_init_table_end; s++) {
