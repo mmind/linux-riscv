@@ -60,7 +60,8 @@ struct device_node *of_irq_find_parent(struct device_node *child)
 		return NULL;
 
 	do {
-		if (of_property_read_u32(child, "interrupt-parent", &parent)) {
+		if (of_property_read_u32(child, "interrupt-parent", &parent) &&
+		    of_property_read_u32(child, "interrupts-extended", &parent)) {
 			p = of_get_parent(child);
 		} else	{
 			if (of_irq_workarounds & OF_IMAP_NO_PHANDLE)
@@ -530,6 +531,8 @@ void __init of_irq_init(const struct of_device_id *matches)
 		desc->interrupt_parent = of_irq_find_parent(np);
 		if (desc->interrupt_parent == np)
 			desc->interrupt_parent = NULL;
+		pr_notice("of_irq_init: found %pOF with parent %pOF\n",
+			  desc->dev, desc->interrupt_parent);
 		list_add_tail(&desc->list, &intc_desc_list);
 	}
 
@@ -554,9 +557,8 @@ void __init of_irq_init(const struct of_device_id *matches)
 
 			of_node_set_flag(desc->dev, OF_POPULATED);
 
-			pr_debug("of_irq_init: init %pOF (%p), parent %p\n",
-				 desc->dev,
-				 desc->dev, desc->interrupt_parent);
+			pr_notice("of_irq_init: init %pOF with parent %pOF\n",
+				  desc->dev, desc->interrupt_parent);
 			ret = desc->irq_init_cb(desc->dev,
 						desc->interrupt_parent);
 			if (ret) {

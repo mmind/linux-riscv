@@ -1,5 +1,14 @@
 menu "SoC selection"
 
+config ARCH_SUNXI
+	bool "Allwinner sunXi SoCs"
+	select SIFIVE_PLIC
+	select SUN4I_TIMER
+	select SUN5I_HSTIMER
+	select SUN20I_INTC
+	help
+	  This enables support for Allwinner sunXi SoC platforms.
+
 config SOC_MICROCHIP_POLARFIRE
 	bool "Microchip PolarFire SoCs"
 	select MCHP_CLK_MPFS
@@ -27,6 +36,9 @@ config SOC_VIRT
 	select GOLDFISH
 	select RTC_DRV_GOLDFISH if RTC_CLASS
 	select SIFIVE_PLIC
+	select PM_GENERIC_DOMAINS if PM
+	select PM_GENERIC_DOMAINS_OF if PM && OF
+	select RISCV_SBI_CPUIDLE if CPU_IDLE
 	help
 	  This enables support for QEMU Virt Machine.
 

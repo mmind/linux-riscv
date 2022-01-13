@@ -26,10 +26,11 @@
 #include <sound/soc.h>
 
 #define	SUN4I_SPDIF_CTL		(0x00)
+	#define SUN4I_SPDIF_CTL_RST_RX			BIT(12)
 	#define SUN4I_SPDIF_CTL_MCLKDIV(v)		((v) << 4) /* v even */
 	#define SUN4I_SPDIF_CTL_MCLKOUTEN		BIT(2)
 	#define SUN4I_SPDIF_CTL_GEN			BIT(1)
-	#define SUN4I_SPDIF_CTL_RESET			BIT(0)
+	#define SUN4I_SPDIF_CTL_RST_TX			BIT(0)
 
 #define SUN4I_SPDIF_TXCFG	(0x04)
 	#define SUN4I_SPDIF_TXCFG_SINGLEMOD		BIT(31)
@@ -51,6 +52,8 @@
 	#define SUN4I_SPDIF_RXCFG_RXEN			BIT(0)
 
 #define SUN4I_SPDIF_TXFIFO	(0x0C)
+
+#define SUN8I_SPDIF_ISTA	(0x0C)
 
 #define SUN4I_SPDIF_RXFIFO	(0x10)
 
@@ -80,9 +83,14 @@
 
 #define SUN4I_SPDIF_FSTA	(0x18)
 	#define SUN4I_SPDIF_FSTA_TXE			BIT(14)
-	#define SUN4I_SPDIF_FSTA_TXECNTSHT		(8)
+	#define SUN4I_SPDIF_FSTA_TXE_CNT		(8)
 	#define SUN4I_SPDIF_FSTA_RXA			BIT(6)
-	#define SUN4I_SPDIF_FSTA_RXACNTSHT		(0)
+	#define SUN4I_SPDIF_FSTA_RXA_CNT		(0)
+
+	#define SUN8I_SPDIF_FSTA_TXE			BIT(31)
+	#define SUN8I_SPDIF_FSTA_TXE_CNT		(16)
+	#define SUN8I_SPDIF_FSTA_RXA			BIT(15)
+	#define SUN8I_SPDIF_FSTA_RXA_CNT		(0)
 
 #define SUN4I_SPDIF_INT		(0x1C)
 	#define SUN4I_SPDIF_INT_RXLOCKEN		BIT(18)
@@ -167,20 +175,20 @@
 /**
  * struct sun4i_spdif_quirks - Differences between SoC variants.
  *
+ * @tx_clk_name: firmware name for the TX clock reference.
  * @reg_dac_txdata: TX FIFO offset for DMA config.
- * @has_reset: SoC needs reset deasserted.
  * @val_fctl_ftx: TX FIFO flush bitmask.
  */
 struct sun4i_spdif_quirks {
+	const char *tx_clk_name;
 	unsigned int reg_dac_txdata;
-	bool has_reset;
 	unsigned int val_fctl_ftx;
 };
 
 struct sun4i_spdif_dev {
 	struct platform_device *pdev;
-	struct clk *spdif_clk;
 	struct clk *apb_clk;
+	struct clk *tx_clk;
 	struct reset_control *rst;
 	struct snd_soc_dai_driver cpu_dai_drv;
 	struct regmap *regmap;
@@ -193,7 +201,7 @@ static void sun4i_spdif_configure(struct sun4i_spdif_dev *host)
 	const struct sun4i_spdif_quirks *quirks = host->quirks;
 
 	/* soft reset SPDIF */
-	regmap_write(host->regmap, SUN4I_SPDIF_CTL, SUN4I_SPDIF_CTL_RESET);
+	regmap_write(host->regmap, SUN4I_SPDIF_CTL, SUN4I_SPDIF_CTL_RST_TX);
 
 	/* flush TX FIFO */
 	regmap_update_bits(host->regmap, SUN4I_SPDIF_FCTL,
@@ -312,7 +320,7 @@ static int sun4i_spdif_hw_params(struct snd_pcm_substream *substream,
 		return -EINVAL;
 	}
 
-	ret = clk_set_rate(host->spdif_clk, mclk);
+	ret = clk_set_rate(host->tx_clk, mclk);
 	if (ret < 0) {
 		dev_err(&pdev->dev,
 			"Setting SPDIF clock rate for %d Hz failed!\n", mclk);
@@ -425,26 +433,33 @@ static struct snd_soc_dai_driver sun4i_spdif_dai = {
 };
 
 static const struct sun4i_spdif_quirks sun4i_a10_spdif_quirks = {
+	.tx_clk_name	= "spdif",
 	.reg_dac_txdata	= SUN4I_SPDIF_TXFIFO,
 	.val_fctl_ftx   = SUN4I_SPDIF_FCTL_FTX,
 };
 
 static const struct sun4i_spdif_quirks sun6i_a31_spdif_quirks = {
+	.tx_clk_name	= "spdif",
 	.reg_dac_txdata	= SUN4I_SPDIF_TXFIFO,
 	.val_fctl_ftx   = SUN4I_SPDIF_FCTL_FTX,
-	.has_reset	= true,
 };
 
 static const struct sun4i_spdif_quirks sun8i_h3_spdif_quirks = {
+	.tx_clk_name	= "spdif",
 	.reg_dac_txdata	= SUN8I_SPDIF_TXFIFO,
 	.val_fctl_ftx   = SUN4I_SPDIF_FCTL_FTX,
-	.has_reset	= true,
+};
+
+static const struct sun4i_spdif_quirks sun20i_d1_spdif_quirks = {
+	.tx_clk_name	= "tx",
+	.reg_dac_txdata = SUN8I_SPDIF_TXFIFO,
+	.val_fctl_ftx   = SUN50I_H6_SPDIF_FCTL_FTX,
 };
 
 static const struct sun4i_spdif_quirks sun50i_h6_spdif_quirks = {
+	.tx_clk_name	= "spdif",
 	.reg_dac_txdata = SUN8I_SPDIF_TXFIFO,
 	.val_fctl_ftx   = SUN50I_H6_SPDIF_FCTL_FTX,
-	.has_reset      = true,
 };
 
 static const struct of_device_id sun4i_spdif_of_match[] = {
@@ -459,6 +474,10 @@ static const struct of_device_id sun4i_spdif_of_match[] = {
 	{
 		.compatible = "allwinner,sun8i-h3-spdif",
 		.data = &sun8i_h3_spdif_quirks,
+	},
+	{
+		.compatible = "allwinner,sun20i-d1-spdif",
+		.data = &sun20i_d1_spdif_quirks,
 	},
 	{
 		.compatible = "allwinner,sun50i-h6-spdif",
@@ -476,7 +495,7 @@ static int sun4i_spdif_runtime_suspend(struct device *dev)
 {
 	struct sun4i_spdif_dev *host  = dev_get_drvdata(dev);
 
-	clk_disable_unprepare(host->spdif_clk);
+	clk_disable_unprepare(host->tx_clk);
 	clk_disable_unprepare(host->apb_clk);
 
 	return 0;
@@ -487,12 +506,12 @@ static int sun4i_spdif_runtime_resume(struct device *dev)
 	struct sun4i_spdif_dev *host  = dev_get_drvdata(dev);
 	int ret;
 
-	ret = clk_prepare_enable(host->spdif_clk);
+	ret = clk_prepare_enable(host->tx_clk);
 	if (ret)
 		return ret;
 	ret = clk_prepare_enable(host->apb_clk);
 	if (ret)
-		clk_disable_unprepare(host->spdif_clk);
+		clk_disable_unprepare(host->tx_clk);
 
 	return ret;
 }
@@ -539,10 +558,10 @@ static int sun4i_spdif_probe(struct platform_device *pdev)
 		return PTR_ERR(host->apb_clk);
 	}
 
-	host->spdif_clk = devm_clk_get(&pdev->dev, "spdif");
-	if (IS_ERR(host->spdif_clk)) {
-		dev_err(&pdev->dev, "failed to get a spdif clock.\n");
-		return PTR_ERR(host->spdif_clk);
+	host->tx_clk = devm_clk_get(&pdev->dev, quirks->tx_clk_name);
+	if (IS_ERR(host->tx_clk)) {
+		dev_err(&pdev->dev, "failed to get TX module clock.\n");
+		return PTR_ERR(host->tx_clk);
 	}
 
 	host->dma_params_tx.addr = res->start + quirks->reg_dac_txdata;
@@ -551,17 +570,12 @@ static int sun4i_spdif_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, host);
 
-	if (quirks->has_reset) {
-		host->rst = devm_reset_control_get_optional_exclusive(&pdev->dev,
-								      NULL);
-		if (PTR_ERR(host->rst) == -EPROBE_DEFER) {
-			ret = -EPROBE_DEFER;
-			dev_err(&pdev->dev, "Failed to get reset: %d\n", ret);
-			return ret;
-		}
-		if (!IS_ERR(host->rst))
-			reset_control_deassert(host->rst);
-	}
+	host->rst = devm_reset_control_get_optional_exclusive(&pdev->dev, NULL);
+	if (IS_ERR(host->rst))
+		return dev_err_probe(&pdev->dev, PTR_ERR(host->rst),
+				     "Failed to get reset\n");
+
+	reset_control_deassert(host->rst);
 
 	ret = devm_snd_soc_register_component(&pdev->dev,
 				&sun4i_spdif_component, &sun4i_spdif_dai, 1);
@@ -589,9 +603,13 @@ err_unregister:
 
 static int sun4i_spdif_remove(struct platform_device *pdev)
 {
+	struct sun4i_spdif_dev *host = dev_get_drvdata(&pdev->dev);
+
 	pm_runtime_disable(&pdev->dev);
 	if (!pm_runtime_status_suspended(&pdev->dev))
 		sun4i_spdif_runtime_suspend(&pdev->dev);
+
+	reset_control_assert(host->rst);
 
 	return 0;
 }

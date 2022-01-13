@@ -13,6 +13,7 @@
 
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
+#include <linux/clk/sunxi-ng.h>
 #include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/fs.h>
@@ -133,12 +134,15 @@ struct sun6i_rtc_clk_data {
 	unsigned int has_auto_swt : 1;
 };
 
+#define RTC_LINEAR_DAY	BIT(0)
+
 struct sun6i_rtc_dev {
 	struct rtc_device *rtc;
 	const struct sun6i_rtc_clk_data *data;
 	void __iomem *base;
 	int irq;
 	unsigned long alarm;
+	unsigned long flags;
 
 	struct clk_hw hw;
 	struct clk_hw *int_osc;
@@ -363,23 +367,6 @@ CLK_OF_DECLARE_DRIVER(sun8i_h3_rtc_clk, "allwinner,sun8i-h3-rtc",
 CLK_OF_DECLARE_DRIVER(sun50i_h5_rtc_clk, "allwinner,sun50i-h5-rtc",
 		      sun8i_h3_rtc_clk_init);
 
-static const struct sun6i_rtc_clk_data sun50i_h6_rtc_data = {
-	.rc_osc_rate = 16000000,
-	.fixed_prescaler = 32,
-	.has_prescaler = 1,
-	.has_out_clk = 1,
-	.export_iosc = 1,
-	.has_losc_en = 1,
-	.has_auto_swt = 1,
-};
-
-static void __init sun50i_h6_rtc_clk_init(struct device_node *node)
-{
-	sun6i_rtc_clk_init(node, &sun50i_h6_rtc_data);
-}
-CLK_OF_DECLARE_DRIVER(sun50i_h6_rtc_clk, "allwinner,sun50i-h6-rtc",
-		      sun50i_h6_rtc_clk_init);
-
 /*
  * The R40 user manual is self-conflicting on whether the prescaler is
  * fixed or configurable. The clock diagram shows it as fixed, but there
@@ -471,17 +458,30 @@ static int sun6i_rtc_gettime(struct device *dev, struct rtc_time *rtc_tm)
 	rtc_tm->tm_min  = SUN6I_TIME_GET_MIN_VALUE(time);
 	rtc_tm->tm_hour = SUN6I_TIME_GET_HOUR_VALUE(time);
 
-	rtc_tm->tm_mday = SUN6I_DATE_GET_DAY_VALUE(date);
-	rtc_tm->tm_mon  = SUN6I_DATE_GET_MON_VALUE(date);
-	rtc_tm->tm_year = SUN6I_DATE_GET_YEAR_VALUE(date);
+	if (chip->flags & RTC_LINEAR_DAY) {
+		struct tm tm;
 
-	rtc_tm->tm_mon  -= 1;
+		/*
+		 * Newer chips store a linear day number, the manual
+		 * does not mandate any epoch base. The BSP driver uses
+		 * the UNIX epoch, let's just copy that, as it's the
+		 * easiest anyway.
+		 */
+		time64_to_tm((date & 0xffff) * 3600ULL * 24, 0, &tm);
+		rtc_tm->tm_mday = tm.tm_mday;
+		rtc_tm->tm_mon  = tm.tm_mon;
+		rtc_tm->tm_year = tm.tm_year;
+	} else {
+		rtc_tm->tm_mday = SUN6I_DATE_GET_DAY_VALUE(date);
+		rtc_tm->tm_mon  = SUN6I_DATE_GET_MON_VALUE(date) - 1;
+		rtc_tm->tm_year = SUN6I_DATE_GET_YEAR_VALUE(date);
 
-	/*
-	 * switch from (data_year->min)-relative offset to
-	 * a (1900)-relative one
-	 */
-	rtc_tm->tm_year += SUN6I_YEAR_OFF;
+		/*
+		 * switch from (data_year->min)-relative offset to
+		 * a (1900)-relative one
+		 */
+		rtc_tm->tm_year += SUN6I_YEAR_OFF;
+	}
 
 	return 0;
 }
@@ -571,15 +571,21 @@ static int sun6i_rtc_settime(struct device *dev, struct rtc_time *rtc_tm)
 	u32 date = 0;
 	u32 time = 0;
 
-	rtc_tm->tm_year -= SUN6I_YEAR_OFF;
 	rtc_tm->tm_mon += 1;
 
-	date = SUN6I_DATE_SET_DAY_VALUE(rtc_tm->tm_mday) |
-		SUN6I_DATE_SET_MON_VALUE(rtc_tm->tm_mon)  |
-		SUN6I_DATE_SET_YEAR_VALUE(rtc_tm->tm_year);
+	if (chip->flags & RTC_LINEAR_DAY) {
+		date = mktime64(rtc_tm->tm_year + 1900, rtc_tm->tm_mon,
+				rtc_tm->tm_mday, 0, 0, 0) / (3600ULL * 24);
+	} else {
+		rtc_tm->tm_year -= SUN6I_YEAR_OFF;
 
-	if (is_leap_year(rtc_tm->tm_year + SUN6I_YEAR_MIN))
-		date |= SUN6I_LEAP_SET_VALUE(1);
+		date = SUN6I_DATE_SET_DAY_VALUE(rtc_tm->tm_mday) |
+			SUN6I_DATE_SET_MON_VALUE(rtc_tm->tm_mon)  |
+			SUN6I_DATE_SET_YEAR_VALUE(rtc_tm->tm_year);
+
+		if (is_leap_year(rtc_tm->tm_year + SUN6I_YEAR_MIN))
+			date |= SUN6I_LEAP_SET_VALUE(1);
+	}
 
 	time = SUN6I_TIME_SET_SEC_VALUE(rtc_tm->tm_sec)  |
 		SUN6I_TIME_SET_MIN_VALUE(rtc_tm->tm_min)  |
@@ -683,9 +689,17 @@ static int sun6i_rtc_probe(struct platform_device *pdev)
 		chip->base = devm_platform_ioremap_resource(pdev, 0);
 		if (IS_ERR(chip->base))
 			return PTR_ERR(chip->base);
+
+		if (IS_REACHABLE(CONFIG_SUN6I_RTC_CCU)) {
+			ret = sun6i_rtc_ccu_probe(&pdev->dev, chip->base);
+			if (ret)
+				return ret;
+		}
 	}
 
 	platform_set_drvdata(pdev, chip);
+
+	chip->flags = (unsigned long)of_device_get_match_data(&pdev->dev);
 
 	chip->irq = platform_get_irq(pdev, 0);
 	if (chip->irq < 0)
@@ -758,6 +772,10 @@ static const struct of_device_id sun6i_rtc_dt_ids[] = {
 	{ .compatible = "allwinner,sun8i-v3-rtc" },
 	{ .compatible = "allwinner,sun50i-h5-rtc" },
 	{ .compatible = "allwinner,sun50i-h6-rtc" },
+	{ .compatible = "allwinner,sun50i-h616-rtc",
+		.data = (void *)RTC_LINEAR_DAY },
+	{ .compatible = "allwinner,sun20i-d1-rtc",
+		.data = (void *)RTC_LINEAR_DAY },
 	{ /* sentinel */ },
 };
 MODULE_DEVICE_TABLE(of, sun6i_rtc_dt_ids);

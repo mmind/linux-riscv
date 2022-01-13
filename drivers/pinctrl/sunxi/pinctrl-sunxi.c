@@ -10,6 +10,7 @@
  * warranty of any kind, whether express or implied.
  */
 
+#define DEBUG
 #include <linux/io.h>
 #include <linux/clk.h>
 #include <linux/gpio/driver.h>
@@ -654,6 +655,16 @@ static int sunxi_pinctrl_set_io_bias_cfg(struct sunxi_pinctrl *pctl,
 		reg &= ~IO_BIAS_MASK;
 		writel(reg | val, pctl->membase + sunxi_grp_config_reg(pin));
 		return 0;
+	case BIAS_VOLTAGE_PIO_POW_MODE_CTL:
+		val = 1800000 < uV && uV <= 2500000 ? BIT(bank) : 0;
+
+		raw_spin_lock_irqsave(&pctl->lock, flags);
+		reg = readl(pctl->membase + PIO_POW_MOD_CTL_REG);
+		reg &= ~BIT(bank);
+		writel(reg | val, pctl->membase + PIO_POW_MOD_CTL_REG);
+		raw_spin_unlock_irqrestore(&pctl->lock, flags);
+
+		fallthrough;
 	case BIAS_VOLTAGE_PIO_POW_MODE_SEL:
 		val = uV <= 1800000 ? 1 : 0;
 
@@ -662,6 +673,7 @@ static int sunxi_pinctrl_set_io_bias_cfg(struct sunxi_pinctrl *pctl,
 		reg &= ~(1 << bank);
 		writel(reg | val << bank, pctl->membase + PIO_POW_MOD_SEL_REG);
 		raw_spin_unlock_irqrestore(&pctl->lock, flags);
+
 		return 0;
 	default:
 		return -EINVAL;
@@ -1014,9 +1026,17 @@ static void sunxi_pinctrl_irq_ack(struct irq_data *d)
 	struct sunxi_pinctrl *pctl = irq_data_get_irq_chip_data(d);
 	u32 status_reg = sunxi_irq_status_reg(pctl->desc, d->hwirq);
 	u8 status_idx = sunxi_irq_status_offset(d->hwirq);
+	u32 new, old;
+
+	old = readl(pctl->membase + status_reg);
 
 	/* Clear the IRQ */
 	writel(1 << status_idx, pctl->membase + status_reg);
+
+	new = readl(pctl->membase + status_reg);
+
+	pr_err("acked %ld in 0x%08x, was 0x%08x, now 0x%08x\n",
+		d->hwirq, status_reg, old, new);
 }
 
 static void sunxi_pinctrl_irq_mask(struct irq_data *d)

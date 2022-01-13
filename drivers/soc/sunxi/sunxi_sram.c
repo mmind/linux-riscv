@@ -18,8 +18,12 @@
 #include <linux/of_device.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
+#include <linux/regulator/driver.h>
 
 #include <linux/soc/sunxi/sunxi_sram.h>
+
+#define SUNXI_SRAM_EMAC_CLOCK_REG	0x30
+#define SUNXI_SYS_LDO_CTRL_REG		0x150
 
 struct sunxi_sram_func {
 	char	*func;
@@ -76,10 +80,16 @@ static struct sunxi_sram_desc sun4i_a10_sram_d = {
 				  SUNXI_SRAM_MAP(1, 1, "usb-otg")),
 };
 
+static struct sunxi_sram_desc sun20i_d1_dsp_sram = {
+	.data	= SUNXI_SRAM_DATA("DSP", 0x8, 0, 1,
+				  SUNXI_SRAM_MAP(1, 0, "cpu"),
+				  SUNXI_SRAM_MAP(0, 1, "dsp")),
+};
+
 static struct sunxi_sram_desc sun50i_a64_sram_c = {
 	.data	= SUNXI_SRAM_DATA("C", 0x4, 24, 1,
-				  SUNXI_SRAM_MAP(0, 1, "cpu"),
-				  SUNXI_SRAM_MAP(1, 0, "de2")),
+				  SUNXI_SRAM_MAP(1, 0, "cpu"),
+				  SUNXI_SRAM_MAP(0, 1, "de2")),
 };
 
 static const struct of_device_id sunxi_sram_dt_ids[] = {
@@ -96,6 +106,10 @@ static const struct of_device_id sunxi_sram_dt_ids[] = {
 		.data		= &sun4i_a10_sram_d.data,
 	},
 	{
+		.compatible	= "allwinner,sun20i-d1-dsp-sram",
+		.data		= &sun20i_d1_dsp_sram.data,
+	},
+	{
 		.compatible	= "allwinner,sun50i-a64-sram-c",
 		.data		= &sun50i_a64_sram_c.data,
 	},
@@ -106,6 +120,7 @@ static struct device *sram_dev;
 static LIST_HEAD(claimed_sram);
 static DEFINE_SPINLOCK(sram_lock);
 static void __iomem *base;
+static struct dentry *debugfs_dir;
 
 static int sunxi_sram_show(struct seq_file *s, void *data)
 {
@@ -254,6 +269,7 @@ int sunxi_sram_claim(struct device *dev)
 	writel(val | ((device << sram_data->offset) & mask),
 	       base + sram_data->reg);
 
+	sram_desc->claimed = true;
 	spin_unlock(&sram_lock);
 
 	return 0;
@@ -264,17 +280,26 @@ int sunxi_sram_release(struct device *dev)
 {
 	const struct sunxi_sram_data *sram_data;
 	struct sunxi_sram_desc *sram_desc;
+	unsigned int device;
+	u32 val, mask;
 
 	if (!dev || !dev->of_node)
 		return -EINVAL;
 
-	sram_data = sunxi_sram_of_parse(dev->of_node, NULL);
+	sram_data = sunxi_sram_of_parse(dev->of_node, &device);
 	if (IS_ERR(sram_data))
 		return -EINVAL;
 
 	sram_desc = to_sram_desc(sram_data);
 
 	spin_lock(&sram_lock);
+	mask = GENMASK(sram_data->offset + sram_data->width - 1,
+		       sram_data->offset);
+	val = readl(base + sram_data->reg);
+	val &= ~mask;
+	writel(val | ((~device << sram_data->offset) & mask),
+	       base + sram_data->reg);
+
 	sram_desc->claimed = false;
 	spin_unlock(&sram_lock);
 
@@ -282,7 +307,47 @@ int sunxi_sram_release(struct device *dev)
 }
 EXPORT_SYMBOL(sunxi_sram_release);
 
+static const struct regulator_ops sunxi_ldo_ops = {
+	.list_voltage		= regulator_list_voltage_linear,
+	.map_voltage		= regulator_map_voltage_linear,
+	.set_voltage_sel	= regulator_set_voltage_sel_regmap,
+	.get_voltage_sel	= regulator_get_voltage_sel_regmap,
+};
+
+static const struct regulator_desc sun20i_d1_ldos[] = {
+	{
+		.name		= "ldoa",
+		.supply_name	= "ldo-in",
+		.of_match	= "ldoa",
+		.regulators_node = "regulators",
+		.ops		= &sunxi_ldo_ops,
+		.type		= REGULATOR_VOLTAGE,
+		.owner		= THIS_MODULE,
+		.n_voltages	= BIT(5),
+		.min_uV		= 1600005, /* nominally 1.8 V */
+		.uV_step	= 13333,
+		.vsel_reg	= SUNXI_SYS_LDO_CTRL_REG,
+		.vsel_mask	= GENMASK(7, 0),
+	},
+	{
+		.name		= "ldob",
+		.supply_name	= "ldo-in",
+		.of_match	= "ldob",
+		.regulators_node = "regulators",
+		.ops		= &sunxi_ldo_ops,
+		.type		= REGULATOR_VOLTAGE,
+		.owner		= THIS_MODULE,
+		.n_voltages	= BIT(6),
+		.min_uV		= 1166675, /* nominally 1.5 V */
+		.uV_step	= 13333,
+		.vsel_reg	= SUNXI_SYS_LDO_CTRL_REG,
+		.vsel_mask	= GENMASK(15, 8),
+	},
+};
+
 struct sunxi_sramc_variant {
+	const struct regulator_desc *ldos;
+	int num_ldos;
 	int num_emac_clocks;
 };
 
@@ -294,6 +359,12 @@ static const struct sunxi_sramc_variant sun8i_h3_sramc_variant = {
 	.num_emac_clocks = 1,
 };
 
+static const struct sunxi_sramc_variant sun20i_d1_sramc_variant = {
+	.ldos = sun20i_d1_ldos,
+	.num_ldos = ARRAY_SIZE(sun20i_d1_ldos),
+	.num_emac_clocks = 1,
+};
+
 static const struct sunxi_sramc_variant sun50i_a64_sramc_variant = {
 	.num_emac_clocks = 1,
 };
@@ -302,7 +373,6 @@ static const struct sunxi_sramc_variant sun50i_h616_sramc_variant = {
 	.num_emac_clocks = 2,
 };
 
-#define SUNXI_SRAM_EMAC_CLOCK_REG	0x30
 static bool sunxi_sram_regmap_accessible_reg(struct device *dev,
 					     unsigned int reg)
 {
@@ -310,6 +380,8 @@ static bool sunxi_sram_regmap_accessible_reg(struct device *dev,
 
 	variant = of_device_get_match_data(dev);
 
+	if (reg == SUNXI_SYS_LDO_CTRL_REG)
+		return true;
 	if (reg < SUNXI_SRAM_EMAC_CLOCK_REG)
 		return false;
 	if (reg > SUNXI_SRAM_EMAC_CLOCK_REG + variant->num_emac_clocks * 4)
@@ -323,7 +395,7 @@ static struct regmap_config sunxi_sram_emac_clock_regmap = {
 	.val_bits       = 32,
 	.reg_stride     = 4,
 	/* last defined register */
-	.max_register   = SUNXI_SRAM_EMAC_CLOCK_REG + 4,
+	.max_register   = SUNXI_SYS_LDO_CTRL_REG,
 	/* other devices have no business accessing other registers */
 	.readable_reg	= sunxi_sram_regmap_accessible_reg,
 	.writeable_reg	= sunxi_sram_regmap_accessible_reg,
@@ -331,9 +403,9 @@ static struct regmap_config sunxi_sram_emac_clock_regmap = {
 
 static int sunxi_sram_probe(struct platform_device *pdev)
 {
-	struct dentry *d;
 	struct regmap *emac_clock;
 	const struct sunxi_sramc_variant *variant;
+	int ret;
 
 	sram_dev = &pdev->dev;
 
@@ -345,20 +417,42 @@ static int sunxi_sram_probe(struct platform_device *pdev)
 	if (IS_ERR(base))
 		return PTR_ERR(base);
 
-	of_platform_populate(pdev->dev.of_node, NULL, NULL, &pdev->dev);
-
-	d = debugfs_create_file("sram", S_IRUGO, NULL, NULL,
-				&sunxi_sram_fops);
-	if (!d)
-		return -ENOMEM;
-
-	if (variant->num_emac_clocks > 0) {
+	if (variant->num_ldos || variant->num_emac_clocks) {
 		emac_clock = devm_regmap_init_mmio(&pdev->dev, base,
 						   &sunxi_sram_emac_clock_regmap);
 
 		if (IS_ERR(emac_clock))
 			return PTR_ERR(emac_clock);
 	}
+
+	if (variant->num_ldos) {
+		struct regulator_config config = { .dev = &pdev->dev };
+		struct regulator_dev *rdev;
+		int i;
+
+		for (i = 0; i < variant->num_ldos; ++i) {
+			const struct regulator_desc *desc = &variant->ldos[i];
+
+			rdev = devm_regulator_register(&pdev->dev, desc, &config);
+			if (IS_ERR(rdev))
+				return PTR_ERR(rdev);
+		}
+	}
+
+	ret = devm_of_platform_populate(&pdev->dev);
+	if (ret)
+		return ret;
+
+	debugfs_dir = debugfs_create_dir("sunxi-sram", NULL);
+	debugfs_create_file("sram", S_IRUGO, debugfs_dir, NULL,
+			    &sunxi_sram_fops);
+
+	return 0;
+}
+
+static int sunxi_sram_remove(struct platform_device *pdev)
+{
+	debugfs_remove(debugfs_dir);
 
 	return 0;
 }
@@ -383,6 +477,10 @@ static const struct of_device_id sunxi_sram_dt_match[] = {
 	{
 		.compatible = "allwinner,sun8i-h3-system-control",
 		.data = &sun8i_h3_sramc_variant,
+	},
+	{
+		.compatible = "allwinner,sun20i-d1-system-control",
+		.data = &sun20i_d1_sramc_variant,
 	},
 	{
 		.compatible = "allwinner,sun50i-a64-sram-controller",
@@ -410,6 +508,7 @@ static struct platform_driver sunxi_sram_driver = {
 		.of_match_table	= sunxi_sram_dt_match,
 	},
 	.probe	= sunxi_sram_probe,
+	.remove	= sunxi_sram_remove,
 };
 module_platform_driver(sunxi_sram_driver);
 

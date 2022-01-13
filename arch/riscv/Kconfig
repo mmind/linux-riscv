@@ -18,6 +18,10 @@ config RISCV
 	select ARCH_HAS_DEBUG_VM_PGTABLE
 	select ARCH_HAS_DEBUG_VIRTUAL if MMU
 	select ARCH_HAS_DEBUG_WX
+	select ARCH_HAS_DMA_PREP_COHERENT
+	select ARCH_HAS_SYNC_DMA_FOR_CPU
+	select ARCH_HAS_SYNC_DMA_FOR_DEVICE
+	select ARCH_HAS_DMA_WRITE_COMBINE
 	select ARCH_HAS_FORTIFY_SOURCE
 	select ARCH_HAS_GCOV_PROFILE_ALL
 	select ARCH_HAS_GIGANTIC_PAGE
@@ -45,6 +49,8 @@ config RISCV
 	select CLONE_BACKWARDS
 	select CLINT_TIMER if !MMU
 	select COMMON_CLK
+	select CPU_PM if CPU_IDLE
+	select DMA_DIRECT_REMAP
 	select EDAC_SUPPORT
 	select GENERIC_ARCH_TOPOLOGY if SMP
 	select GENERIC_ATOMIC64 if !64BIT
@@ -53,6 +59,7 @@ config RISCV
 	select GENERIC_GETTIMEOFDAY if HAVE_GENERIC_VDSO
 	select GENERIC_IDLE_POLL_SETUP
 	select GENERIC_IOREMAP if MMU
+	select GENERIC_IRQ_IPI
 	select GENERIC_IRQ_MULTI_HANDLER
 	select GENERIC_IRQ_SHOW
 	select GENERIC_IRQ_SHOW_LEVEL
@@ -187,6 +194,9 @@ config ARCH_WANT_GENERAL_HUGETLB
 config ARCH_SUPPORTS_UPROBES
 	def_bool y
 
+config ARCH_SUSPEND_POSSIBLE
+	def_bool y
+
 config STACKTRACE_SUPPORT
 	def_bool y
 
@@ -248,7 +258,7 @@ config ARCH_RV64I
 	select HAVE_FTRACE_MCOUNT_RECORD if !XIP_KERNEL
 	select HAVE_FUNCTION_GRAPH_TRACER
 	select HAVE_FUNCTION_TRACER if !XIP_KERNEL
-	select SWIOTLB if MMU
+	# select SWIOTLB if MMU
 
 endchoice
 
@@ -565,6 +575,14 @@ config BUILTIN_DTB
 menu "Power management options"
 
 source "kernel/power/Kconfig"
+
+endmenu
+
+menu "CPU Power Management"
+
+source "drivers/cpufreq/Kconfig"
+
+source "drivers/cpuidle/Kconfig"
 
 endmenu
 

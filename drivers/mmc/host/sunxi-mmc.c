@@ -54,25 +54,56 @@
 #define SDXC_REG_MISTA	(0x34) /* SMC Masked Interrupt Status Register */
 #define SDXC_REG_RINTR	(0x38) /* SMC Raw Interrupt Status Register */
 #define SDXC_REG_STAS	(0x3C) /* SMC Status Register */
-#define SDXC_REG_FTRGL	(0x40) /* SMC FIFO Threshold Watermark Registe */
+#define SDXC_REG_FTRGL	(0x40) /* SMC FIFO Threshold Watermark Register */
 #define SDXC_REG_FUNS	(0x44) /* SMC Function Select Register */
 #define SDXC_REG_CBCR	(0x48) /* SMC CIU Byte Count Register */
 #define SDXC_REG_BBCR	(0x4C) /* SMC BIU Byte Count Register */
 #define SDXC_REG_DBGC	(0x50) /* SMC Debug Enable Register */
-#define SDXC_REG_HWRST	(0x78) /* SMC Card Hardware Reset for Register */
+#define SDXC_REG_HWRST	(0x78) /* SMC Card Hardware Reset Register */
 #define SDXC_REG_DMAC	(0x80) /* SMC IDMAC Control Register */
-#define SDXC_REG_DLBA	(0x84) /* SMC IDMAC Descriptor List Base Addre */
+#define SDXC_REG_DLBA	(0x84) /* SMC IDMAC Descriptor List Base Address */
 #define SDXC_REG_IDST	(0x88) /* SMC IDMAC Status Register */
 #define SDXC_REG_IDIE	(0x8C) /* SMC IDMAC Interrupt Enable Register */
-#define SDXC_REG_CHDA	(0x90)
-#define SDXC_REG_CBDA	(0x94)
+#define SDXC_REG_CHDA	(0x90) /* Current Host Descriptor Address */
+#define SDXC_REG_CBDA	(0x94) /* Current Buffer Descriptor Address */
+
+/* New registers introduced in A80 */
+#define SDXC_REG_A12A		0x058 /* Auto Command 12 Register */
+#define SDXC_REG_THLD		0x100 /* Card Threshold Control Register */
+#define SDXC_REG_DSBD		0x10C /* eMMC 4.5 DDR Start Bit Detection */
+
+/* New registers introduced in A83T */
+#define SDXC_REG_NTSR		0x05C /* New Timing Set Register */
+#define SDXC_REG_SDBG		0x060 /* New Timing Set Debug Register */
+
+/* New registers introduced in H3 */
+#define SDXC_REG_RES_CRC	0x110 /* CRC Response from Card/eMMC */
+#define SDXC_REG_D7_CRC		0x114 /* CRC Data 7 from Card/eMMC */
+#define SDXC_REG_D6_CRC		0x118 /* CRC Data 6 from Card/eMMC */
+#define SDXC_REG_D5_CRC		0x11C /* CRC Data 5 from Card/eMMC */
+#define SDXC_REG_D4_CRC		0x120 /* CRC Data 4 from Card/eMMC */
+#define SDXC_REG_D3_CRC		0x124 /* CRC Data 3 from Card/eMMC */
+#define SDXC_REG_D2_CRC		0x128 /* CRC Data 2 from Card/eMMC */
+#define SDXC_REG_D1_CRC		0x12C /* CRC Data 1 from Card/eMMC */
+#define SDXC_REG_D0_CRC		0x130 /* CRC Data 0 from Card/eMMC */
+#define SDXC_REG_CRC_STA	0x134 /* CRC Status from Write Operation */
 
 /* New registers introduced in A64 */
-#define SDXC_REG_A12A		0x058 /* SMC Auto Command 12 Register */
-#define SDXC_REG_SD_NTSR	0x05C /* SMC New Timing Set Register */
+#define SDXC_REG_CSDC		0x054 /* CRC Status Detect Register */
 #define SDXC_REG_DRV_DL		0x140 /* Drive Delay Control Register */
-#define SDXC_REG_SAMP_DL_REG	0x144 /* SMC sample delay control */
-#define SDXC_REG_DS_DL_REG	0x148 /* SMC data strobe delay control */
+#define SDXC_REG_SAMP_DL	0x144 /* Sample Delay Control Register */
+#define SDXC_REG_DS_DL		0x148 /* Data Strobe Delay Control Register */
+
+/* New registers introduced in H6 */
+#define SDXC_REG_EMCE		0x064 /* Embedded Encrypt/Decrypt Control */
+#define SDXC_REG_EMCE_DBG	0x068 /* Embedded Encrypt/Decrypt Debug */
+
+/* New registers introduced in H616 */
+#define SDXC_REG_EXT_CMD	0x138 /* Extended Command Register */
+#define SDXC_REG_EXT_RESP	0x13C /* Extended Response Register */
+
+/* New registers introduced in A100 */
+#define SDXC_REG_HS400_DL	0x14C /* HS400 Delay Control Register */
 
 #define mmc_readl(host, reg) \
 	readl((host)->reg_base + SDXC_##reg)
@@ -213,6 +244,9 @@
 #define SDXC_IDMAC_DES0_ER	BIT(5)  /* end of ring */
 #define SDXC_IDMAC_DES0_CES	BIT(30) /* card error summary */
 #define SDXC_IDMAC_DES0_OWN	BIT(31) /* 1-idma owns it, 0-host owns it */
+
+/* Buffer size must be a multiple of 4 bytes. */
+#define SDXC_IDMAC_DES1_ALIGN	4
 
 #define SDXC_CLK_400K		0
 #define SDXC_CLK_25M		1
@@ -361,24 +395,24 @@ static void sunxi_mmc_init_idma_des(struct sunxi_mmc_host *host,
 {
 	struct sunxi_idma_des *pdes = (struct sunxi_idma_des *)host->sg_cpu;
 	dma_addr_t next_desc = host->sg_dma;
-	int i, max_len = (1 << host->cfg->idma_des_size_bits);
+	int i;
 
 	for (i = 0; i < data->sg_len; i++) {
 		pdes[i].config = cpu_to_le32(SDXC_IDMAC_DES0_CH |
 					     SDXC_IDMAC_DES0_OWN |
 					     SDXC_IDMAC_DES0_DIC);
 
-		if (data->sg[i].length == max_len)
-			pdes[i].buf_size = 0; /* 0 == max_len */
-		else
-			pdes[i].buf_size = cpu_to_le32(data->sg[i].length);
+		pdes[i].buf_size =
+			cpu_to_le32(ALIGN(data->sg[i].length,
+					  SDXC_IDMAC_DES1_ALIGN));
 
 		next_desc += sizeof(struct sunxi_idma_des);
 		pdes[i].buf_addr_ptr1 =
 			cpu_to_le32(sg_dma_address(&data->sg[i]) >>
 				    host->cfg->idma_des_shift);
-		pdes[i].buf_addr_ptr2 = cpu_to_le32((u32)next_desc >>
-						    host->cfg->idma_des_shift);
+		pdes[i].buf_addr_ptr2 =
+			cpu_to_le32(next_desc >>
+				    host->cfg->idma_des_shift);
 	}
 
 	pdes[0].config |= cpu_to_le32(SDXC_IDMAC_DES0_FD);
@@ -715,6 +749,17 @@ static int sunxi_mmc_calibrate(struct sunxi_mmc_host *host, int reg_off)
 	 */
 	writel(SDXC_CAL_DL_SW_EN, host->reg_base + reg_off);
 
+#if 0
+	writel(SDXC_CAL_START, host->reg_base + reg_off);
+
+	unsigned long expire = jiffies + msecs_to_jiffies(250);
+	u32 rval;
+
+	do {
+		rval = readl(host->reg_base + reg_off);
+	} while (time_before(jiffies, expire) && !(rval & SDXC_CAL_DONE));
+#endif
+
 	return 0;
 }
 
@@ -833,9 +878,9 @@ static int sunxi_mmc_clk_set_rate(struct sunxi_mmc_host *host,
 	 */
 	if (host->use_new_timings) {
 		/* Don't touch the delay bits */
-		rval = mmc_readl(host, REG_SD_NTSR);
+		rval = mmc_readl(host, REG_NTSR);
 		rval |= SDXC_2X_TIMING_MODE;
-		mmc_writel(host, REG_SD_NTSR, rval);
+		mmc_writel(host, REG_NTSR, rval);
 	}
 
 	/* sunxi_mmc_clk_set_phase expects the actual card clock rate */
@@ -843,7 +888,7 @@ static int sunxi_mmc_clk_set_rate(struct sunxi_mmc_host *host,
 	if (ret)
 		return ret;
 
-	ret = sunxi_mmc_calibrate(host, SDXC_REG_SAMP_DL_REG);
+	ret = sunxi_mmc_calibrate(host, SDXC_REG_SAMP_DL);
 	if (ret)
 		return ret;
 
@@ -1167,9 +1212,16 @@ static const struct sunxi_mmc_cfg sun9i_a80_cfg = {
 	.can_calibrate = false,
 };
 
+static const struct sunxi_mmc_cfg sun20i_d1_cfg = {
+	.idma_des_size_bits = 13,
+	.idma_des_shift = 2,
+	.can_calibrate = true,
+	.mask_data0 = true,
+	.needs_new_timings = true,
+};
+
 static const struct sunxi_mmc_cfg sun50i_a64_cfg = {
 	.idma_des_size_bits = 16,
-	.clk_delays = NULL,
 	.can_calibrate = true,
 	.mask_data0 = true,
 	.needs_new_timings = true,
@@ -1177,7 +1229,6 @@ static const struct sunxi_mmc_cfg sun50i_a64_cfg = {
 
 static const struct sunxi_mmc_cfg sun50i_a64_emmc_cfg = {
 	.idma_des_size_bits = 13,
-	.clk_delays = NULL,
 	.can_calibrate = true,
 	.needs_new_timings = true,
 };
@@ -1185,7 +1236,6 @@ static const struct sunxi_mmc_cfg sun50i_a64_emmc_cfg = {
 static const struct sunxi_mmc_cfg sun50i_a100_cfg = {
 	.idma_des_size_bits = 16,
 	.idma_des_shift = 2,
-	.clk_delays = NULL,
 	.can_calibrate = true,
 	.mask_data0 = true,
 	.needs_new_timings = true,
@@ -1194,7 +1244,6 @@ static const struct sunxi_mmc_cfg sun50i_a100_cfg = {
 static const struct sunxi_mmc_cfg sun50i_a100_emmc_cfg = {
 	.idma_des_size_bits = 13,
 	.idma_des_shift = 2,
-	.clk_delays = NULL,
 	.can_calibrate = true,
 	.needs_new_timings = true,
 };
@@ -1205,6 +1254,7 @@ static const struct of_device_id sunxi_mmc_of_match[] = {
 	{ .compatible = "allwinner,sun7i-a20-mmc", .data = &sun7i_a20_cfg },
 	{ .compatible = "allwinner,sun8i-a83t-emmc", .data = &sun8i_a83t_emmc_cfg },
 	{ .compatible = "allwinner,sun9i-a80-mmc", .data = &sun9i_a80_cfg },
+	{ .compatible = "allwinner,sun20i-d1-mmc", .data = &sun20i_d1_cfg },
 	{ .compatible = "allwinner,sun50i-a64-mmc", .data = &sun50i_a64_cfg },
 	{ .compatible = "allwinner,sun50i-a64-emmc", .data = &sun50i_a64_emmc_cfg },
 	{ .compatible = "allwinner,sun50i-a100-mmc", .data = &sun50i_a100_cfg },
@@ -1411,7 +1461,8 @@ static int sunxi_mmc_probe(struct platform_device *pdev)
 	mmc->max_blk_count	= 8192;
 	mmc->max_blk_size	= 4096;
 	mmc->max_segs		= PAGE_SIZE / sizeof(struct sunxi_idma_des);
-	mmc->max_seg_size	= (1 << host->cfg->idma_des_size_bits);
+	mmc->max_seg_size	= (1 << host->cfg->idma_des_size_bits) -
+				  SDXC_IDMAC_DES1_ALIGN;
 	mmc->max_req_size	= mmc->max_seg_size * mmc->max_segs;
 	/* 400kHz ~ 52MHz */
 	mmc->f_min		=   400000;
