@@ -246,7 +246,7 @@ static bool cpufeature_cmo_check_func(unsigned int stage)
 	case RISCV_ALTERNATIVES_BOOT:
 //		return cpufeature_svpbmt_check_fdt();
 	default:
-return true;
+return false;
 //		return cpufeature_svpbmt_check_of();
 	}
 
