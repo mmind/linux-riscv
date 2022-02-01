@@ -137,12 +137,6 @@ asm volatile(ALTERNATIVE(								\
 asm volatile(ALTERNATIVE_2(								\
 	"nop\n\t"									\
 	"nop\n\t"									\
-"nop\n\t"									\
-"nop\n\t"									\
-"nop\n\t"									\
-"nop\n\t"									\
-"nop\n\t"									\
-"nop\n\t"									\
 	"nop\n\t"									\
 	"nop\n\t"									\
 	"nop\n\t"									\
@@ -150,12 +144,6 @@ asm volatile(ALTERNATIVE_2(								\
 	"mv a0, %1\n\t"									\
 	"j 2f\n\t"									\
 	"3:\n\t"									\
-"nop\n\t"									\
-"nop\n\t"									\
-"nop\n\t"									\
-"nop\n\t"									\
-"nop\n\t"									\
-"nop\n\t"									\
 	CBO_##_op##_A0 "\n\t"								\
 	"addi a0, a0, %0\n\t"								\
 	"2:\n\t"									\
@@ -164,12 +152,6 @@ asm volatile(ALTERNATIVE_2(								\
 	"mv a0, %1\n\t"									\
 	"j 2f\n\t"									\
 	"3:\n\t"									\
-"add a2, zero, a0\n\t" \
-"li a7, 1\n\t" \
-"li a6, 0\n\t" \
-"li a0, 36\n\t" \
-"ecall\n\t" \
-"add a0, zero, a2\n\t" \
 	THEAD_##_op##_A0 "\n\t"								\
 	"addi a0, a0, %0\n\t"								\
 	"2:\n\t"									\
