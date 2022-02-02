@@ -5,10 +5,12 @@
  * Copyright (c) 2020 Western Digital Corporation or its affiliates.
  */
 
+#define pr_fmt(fmt) "riscv: " fmt
 #include <linux/bits.h>
 #include <linux/init.h>
 #include <linux/pm.h>
 #include <linux/reboot.h>
+#include <asm/ipi-mux.h>
 #include <asm/sbi.h>
 #include <asm/smp.h>
 
@@ -643,9 +645,17 @@ static void sbi_send_cpumask_ipi(const struct cpumask *target)
 	sbi_send_ipi(target);
 }
 
-static const struct riscv_ipi_ops sbi_ipi_ops = {
-	.ipi_inject = sbi_send_cpumask_ipi
-};
+static void sbi_ipi_clear(void)
+{
+	csr_clear(CSR_IP, IE_SIE);
+}
+
+void __init sbi_ipi_init(void)
+{
+	if (riscv_ipi_mux_create(true, false,
+				 sbi_ipi_clear, sbi_send_cpumask_ipi))
+		pr_info("providing IPIs using SBI IPI extension\n");
+}
 
 void __init sbi_init(void)
 {
@@ -693,6 +703,4 @@ void __init sbi_init(void)
 		__sbi_send_ipi	= __sbi_send_ipi_v01;
 		__sbi_rfence	= __sbi_rfence_v01;
 	}
-
-	riscv_set_ipi_ops(&sbi_ipi_ops);
 }
