@@ -549,10 +549,6 @@ static inline pgprot_t pgprot_writecombine(pgprot_t _prot)
 	return __pgprot(prot);
 }
 
-#define __HAVE_PHYS_MEM_ACCESS_PROT
-extern pgprot_t phys_mem_access_prot(struct file *file, unsigned long pfn,
-				     unsigned long size, pgprot_t vma_prot);
-
 /*
  * THP functions
  */
