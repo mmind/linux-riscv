@@ -38,6 +38,11 @@ static const struct errata_info errata_list[ERRATA_THEAD_NUMBER] = {
 		.stage = RISCV_ALTERNATIVES_BOOT,
 		.check_func = errata_mt_check_func
 	},
+	{
+		.name = "icache",
+		.stage = RISCV_ALTERNATIVES_BOOT,
+		.check_func = errata_mt_check_func
+	},
 };
 
 static u32 thead_errata_probe(unsigned int stage, unsigned long archid, unsigned long impid)
@@ -48,6 +53,13 @@ static u32 thead_errata_probe(unsigned int stage, unsigned long archid, unsigned
 
 	for (idx = 0; idx < ERRATA_THEAD_NUMBER; idx++) {
 		info = &errata_list[idx];
+
+if (stage == RISCV_ALTERNATIVES_MODULE) {
+printk("bla\n");
+printk("%s: idx %d\n", __func__, idx);
+printk("%s: info: 0x%lx\n", __func__, (unsigned long)info);
+}
+if (idx == 2) continue;
 
 		if ((stage == RISCV_ALTERNATIVES_MODULE ||
 		     info->stage == stage) && info->check_func(archid, impid))

@@ -22,11 +22,6 @@ static inline void flush_dcache_page(struct page *page)
 }
 #define ARCH_IMPLEMENTS_FLUSH_DCACHE_PAGE 1
 
-/*
- * RISC-V doesn't have an instruction to flush parts of the instruction cache,
- * so instead we just flush the whole thing.
- */
-#define flush_icache_range(start, end) flush_icache_all()
 #define flush_icache_user_page(vma, pg, addr, len) \
 	flush_icache_mm(vma->vm_mm, 0)
 
@@ -41,6 +36,24 @@ void flush_icache_all(void);
 void flush_icache_mm(struct mm_struct *mm, bool local);
 
 #endif /* CONFIG_SMP */
+
+/*
+ * RISC-V doesn't have an instruction to flush parts of the instruction cache
+ * in general, while some cores may implment separate instructions for it.
+ * So as default instead we just flush the whole thing but allow cores to
+ * implement their own via the errata system.
+ */
+DECLARE_STATIC_KEY_FALSE(have_icache_flush_hw);
+void flush_icache_range_hw(unsigned long start, unsigned long end);
+
+static inline void flush_icache_range(unsigned long start, unsigned long end)
+{
+	if (static_branch_unlikely(&have_icache_flush_hw))
+		flush_icache_range_hw(start, end);
+	else
+		flush_icache_all();
+}
+#define flush_icache_range flush_icache_range
 
 /*
  * Bits in sys_riscv_flush_icache()'s flags argument.
