@@ -4,6 +4,7 @@
  */
 
 #include <asm/cacheflush.h>
+#include <asm/errata_list.h>
 
 #ifdef CONFIG_SMP
 
@@ -76,6 +77,22 @@ void flush_icache_mm(struct mm_struct *mm, bool local)
 }
 
 #endif /* CONFIG_SMP */
+
+DEFINE_STATIC_KEY_FALSE(have_icache_flush_hw);
+
+#define THEAD_ICACHE_IPA_X5	".long 0x0382800b"
+#define THEAD_ICACHE_IVA_X5	".long 0x0302800b"
+#define THEAD_SYNC_IS		".long 0x01b0000b"
+
+void flush_icache_range_hw(unsigned long start, unsigned long end)
+{
+	register unsigned long tmp asm("x5") = start & (~(L1_CACHE_BYTES-1));
+
+	for (; tmp < ALIGN(end, L1_CACHE_BYTES); tmp += L1_CACHE_BYTES)
+		asm volatile(THEAD_ICACHE_IVA_X5 : : "r" (tmp) : "memory");
+
+	asm volatile(THEAD_SYNC_IS);
+}
 
 #ifdef CONFIG_MMU
 void flush_icache_pte(pte_t pte)

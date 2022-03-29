@@ -17,7 +17,8 @@
 #ifdef CONFIG_ERRATA_THEAD
 #define	ERRATA_THEAD_PBMT 0
 #define	ERRATA_THEAD_CMO 1
-#define	ERRATA_THEAD_NUMBER 2
+#define	ERRATA_THEAD_ICACHEFLUSH 2
+#define	ERRATA_THEAD_NUMBER 3
 #endif
 
 #define	CPUFEATURE_SVPBMT 0
@@ -141,6 +142,32 @@ asm volatile(ALTERNATIVE_2(						\
 	    "r"((unsigned long)(_start) & ~((_cachesize) - 1UL)),	\
 	    "r"((unsigned long)(_start) + (_size))			\
 	: "a0")
+
+#define THEAD_ICACHE_IVA_T0	".long 0x0302800b"
+#define THEAD_SYNC_IS		".long 0x01b0000b"
+
+#define ALT_FLUSH_ICACHE_RANGE(_start, _size)				\
+asm volatile(ALTERNATIVE(						\
+	"nop\n\t"							\
+	"nop\n\t"							\
+	"nop\n\t"							\
+	"nop\n\t"							\
+	"nop\n\t"							\
+	"nop",								\
+	"mv a0, %1\n\t"							\
+	"j 2f\n\t"							\
+	"3:\n\t"							\
+	THEAD_ICACHE_IVA_T0 "\n\t"					\
+	"addi a0, a0, %0\n\t"						\
+	"2:\n\t"							\
+	"bltu a0, %2, 3b\n\t"						\
+	THEAD_SYNC_IS, THEAD_VENDOR_ID,					\
+			ERRATA_THEAD_CMO, CONFIG_ERRATA_THEAD_CMO)	\
+	: : "I"(L1_CACHE_BYTES),					\
+	    "r"(ALIGN((_start), (_cachesize))),				\
+	    "r"(ALIGN((_start) + (_size), (_cachesize)))		\
+	: "t0")
+
 
 #endif /* __ASSEMBLY__ */
 
