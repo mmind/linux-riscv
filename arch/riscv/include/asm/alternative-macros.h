@@ -14,6 +14,93 @@
 	.word	\errata_id
 .endm
 
+/*
+ * Alternative sequences
+ *
+ * The code for the case where the capability is not present will be
+ * assembled and linked as normal. There are no restrictions on this
+ * code.
+ *
+ * The code for the case where the capability is present will be
+ * assembled into a special section to be used for dynamic patching.
+ * Code for that case must:
+ *
+ * 1. Be exactly the same length (in bytes) as the default code
+ *    sequence.
+ *
+ * 2. Not contain a branch target that is used outside of the
+ *    alternative sequence it is defined in (branches into an
+ *    alternative sequence are not fixed up).
+ */
+
+/*
+ * Begin an alternative code sequence.
+ */
+.macro alternative_if_not vendor_id, cap_id
+	.set .Lasm_alt_mode, 0
+	.pushsection .alternative, "a"
+	ALT_ENTRY 886f, 888f, \vendor_id, \cap_id, 889f - 888f
+	.popsection
+886:
+	.option push
+	.option norvc
+	.option norelax
+.endm
+
+.macro alternative_if vendor_id, cap_id
+	.set .Lasm_alt_mode, 1
+	.pushsection .alternative, "a"
+	ALT_ENTRY 888f, 886f, \vendor_id, \cap_id, 887f - 886f
+	.popsection
+	.subsection 1
+	.align 2	/* So GAS knows label 886 is suitably aligned */
+886:
+	.option push
+	.option norvc
+	.option norelax
+.endm
+
+/*
+ * Provide the other half of the alternative code sequence.
+ */
+.macro alternative_else
+	.option pop
+887:
+	.if .Lasm_alt_mode==0
+	.subsection 1
+	.else
+	.previous
+	.endif
+888:
+	.option push
+	.option norvc
+	.option norelax
+.endm
+
+/*
+ * Complete an alternative code sequence.
+ */
+.macro alternative_endif
+	.option pop
+889:
+	.if .Lasm_alt_mode==0
+	.org	. - (887b - 886b) + (889b - 888b)
+	.org	. - (889b - 888b) + (887b - 886b)
+	.previous
+	.endif
+.endm
+
+/*
+ * Provides a trivial alternative or default sequence consisting solely
+ * of NOPs. The number of NOPs is chosen automatically to match the
+ * previous case.
+ */
+.macro alternative_else_nop_endif
+alternative_else
+	nops	(887b-886b) / 4
+alternative_endif
+.endm
+
 .macro ALT_NEW_CONTENT vendor_id, errata_id, enable = 1, new_c : vararg
 	.if \enable
 	.pushsection .alternative, "a"
