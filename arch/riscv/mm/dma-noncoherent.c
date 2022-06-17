@@ -7,6 +7,9 @@
 
 #include <linux/dma-direct.h>
 #include <linux/dma-map-ops.h>
+#include <linux/init.h>
+#include <linux/io.h>
+#include <linux/libfdt.h>
 #include <linux/mm.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
