@@ -30,4 +30,3 @@ endif
 endif
 
 obj-$(CONFIG_DEBUG_VIRTUAL) += physaddr.o
-obj-$(CONFIG_RISCV_ISA_ZICBOM) += dma-noncoherent.o
