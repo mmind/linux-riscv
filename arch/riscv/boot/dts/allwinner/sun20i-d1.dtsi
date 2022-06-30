@@ -133,6 +133,7 @@
 		#size-cells = <1>;
 		ranges;
 		interrupt-parent = <&intc>;
+		dma-noncoherent;
 
 		// TODO: write a binding and driver.
 		dsp: dsp@1700000 {
@@ -1017,6 +1018,7 @@
 			reg = <0x4500000 0x10000>;
 			clocks = <&ccu CLK_BUS_EMAC>;
 			clock-names = "stmmaceth";
+			dma-noncoherent;
 			resets = <&ccu RST_BUS_EMAC>;
 			reset-names = "stmmaceth";
 			interrupts = <62 IRQ_TYPE_LEVEL_HIGH>;
