@@ -6,6 +6,8 @@
 #ifndef _ASM_RISCV_STRING_H
 #define _ASM_RISCV_STRING_H
 
+#include <asm/alternative-macros.h>
+#include <asm/errata_list.h>
 #include <linux/types.h>
 #include <linux/linkage.h>
 
