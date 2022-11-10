@@ -809,12 +809,44 @@ static void riscv_pmu_destroy(struct riscv_pmu *pmu)
 	cpuhp_state_remove_instance(CPUHP_AP_PERF_RISCV_STARTING, &pmu->node);
 }
 
+#include <linux/ktime.h>
+
 static int pmu_sbi_device_probe(struct platform_device *pdev)
 {
 	struct riscv_pmu *pmu = NULL;
 	unsigned long cmask = 0;
 	int ret = -ENODEV;
 	int num_counters;
+char *tmp = "This is a test string to measure performance with both the generic and zbb variants of strlen.";
+char *tmp1 = "This is a test string to measure performance with both the generic and zbb variants of strcmp.";
+int i;
+u64 start_time, stop_time, elapsed_time;
+
+num_counters = 0;
+start_time = ktime_get_ns();
+for (i = 0; i < 10000; i++)
+	num_counters += strlen(tmp);
+stop_time = ktime_get_ns();
+printk("%s: overall count %d\n", __func__, num_counters);
+elapsed_time = stop_time - start_time;
+pr_info("%s: elapsedTime of strlen: %llu\n", __func__, elapsed_time);
+
+num_counters = 0;
+start_time = ktime_get_ns();
+for (i = 0; i < 10000; i++)
+	num_counters += strcmp(tmp, tmp1);
+stop_time = ktime_get_ns();
+elapsed_time = stop_time - start_time;
+pr_info("%s: elapsedTime of strcmp: %llu\n", __func__, elapsed_time);
+
+num_counters = 0;
+start_time = ktime_get_ns();
+for (i = 0; i < 10000; i++)
+	num_counters += strncmp(tmp, tmp1, strlen(tmp) - 2);
+stop_time = ktime_get_ns();
+elapsed_time = stop_time - start_time;
+pr_info("%s: elapsedTime of strncmp: %llu\n", __func__, elapsed_time);
+
 
 	pr_info("SBI PMU extension is available\n");
 	pmu = riscv_pmu_alloc();
