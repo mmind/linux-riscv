@@ -350,13 +350,13 @@ static u32 __init_or_module cpufeature_probe(unsigned int stage)
 	u32 cpu_req_feature = 0;
 
 	if (cpufeature_probe_svpbmt(stage))
-		cpu_req_feature |= BIT(CPUFEATURE_SVPBMT);
+		cpu_req_feature |= CPUFEATURE_SVPBMT;
 
 	if (cpufeature_probe_zicbom(stage))
-		cpu_req_feature |= BIT(CPUFEATURE_ZICBOM);
+		cpu_req_feature |= CPUFEATURE_ZICBOM;
 
 	if (cpufeature_probe_zbb(stage))
-		cpu_req_feature |= BIT(CPUFEATURE_ZBB);
+		cpu_req_feature |= CPUFEATURE_ZBB;
 
 	return cpu_req_feature;
 }
@@ -367,19 +367,17 @@ void __init_or_module riscv_cpufeature_patch_func(struct alt_entry *begin,
 {
 	u32 cpu_req_feature = cpufeature_probe(stage);
 	struct alt_entry *alt;
-	u32 tmp;
 
 	for (alt = begin; alt < end; alt++) {
 		if (alt->vendor_id != 0)
 			continue;
-		if (alt->errata_id >= CPUFEATURE_NUMBER) {
+		if (alt->errata_id & GENMASK(31, CPUFEATURE_NUMBER)) {
 			WARN(1, "This feature id:%d is not in kernel cpufeature list",
 				alt->errata_id);
 			continue;
 		}
 
-		tmp = (1U << alt->errata_id);
-		if (cpu_req_feature & tmp) {
+		if ((cpu_req_feature & alt->errata_id) == alt->errata_id) {
 			patch_text_nosync(alt->old_ptr, alt->alt_ptr, alt->alt_len);
 			riscv_alternative_fix_offsets(alt->old_ptr, alt->alt_len,
 						      alt->old_ptr - alt->alt_ptr);
