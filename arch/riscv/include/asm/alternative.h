@@ -36,6 +36,7 @@ struct alt_entry {
 	unsigned long vendor_id; /* cpu vendor id */
 	unsigned long alt_len;   /* The replacement size */
 	unsigned int errata_id;  /* The errata id */
+	unsigned int errata_not; /* Errata id not to match against */
 } __packed;
 
 struct errata_checkfunc_id {

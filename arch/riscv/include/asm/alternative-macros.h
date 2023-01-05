@@ -6,18 +6,19 @@
 
 #ifdef __ASSEMBLY__
 
-.macro ALT_ENTRY oldptr newptr vendor_id errata_id new_len
+.macro ALT_ENTRY oldptr newptr new_len vendor_id errata_id errata_not
 	RISCV_PTR \oldptr
 	RISCV_PTR \newptr
 	REG_ASM \vendor_id
 	REG_ASM \new_len
 	.word	\errata_id
+	.word	\errata_not
 .endm
 
-.macro ALT_NEW_CONTENT vendor_id, errata_id, enable = 1, new_c : vararg
+.macro ALT_NEW_CONTENT vendor_id, errata_id, errata_not, enable = 1, new_c : vararg
 	.if \enable
 	.pushsection .alternative, "a"
-	ALT_ENTRY 886b, 888f, \vendor_id, \errata_id, 889f - 888f
+	ALT_ENTRY 886b, 888f, 889f - 888f, \vendor_id, \errata_id, \errata_not
 	.popsection
 	.subsection 1
 888 :
@@ -33,7 +34,7 @@
 	.endif
 .endm
 
-.macro ALTERNATIVE_CFG old_c, new_c, vendor_id, errata_id, enable
+.macro ALTERNATIVE_CFG old_c, new_c, vendor_id, errata_id, errata_not, enable
 886 :
 	.option push
 	.option norvc
@@ -41,13 +42,13 @@
 	\old_c
 	.option pop
 887 :
-	ALT_NEW_CONTENT \vendor_id, \errata_id, \enable, \new_c
+	ALT_NEW_CONTENT \vendor_id, \errata_id, \errata_not, \enable, \new_c
 .endm
 
-.macro ALTERNATIVE_CFG_2 old_c, new_c_1, vendor_id_1, errata_id_1, enable_1,	\
-				new_c_2, vendor_id_2, errata_id_2, enable_2
-	ALTERNATIVE_CFG "\old_c", "\new_c_1", \vendor_id_1, \errata_id_1, \enable_1
-	ALT_NEW_CONTENT \vendor_id_2, \errata_id_2, \enable_2, \new_c_2
+.macro ALTERNATIVE_CFG_2 old_c, new_c_1, vendor_id_1, errata_id_1, errata_not_1, enable_1,	\
+				new_c_2, vendor_id_2, errata_id_2, errata_not_2, enable_2
+	ALTERNATIVE_CFG "\old_c", "\new_c_1", \vendor_id_1, \errata_id_1, \errata_not_1, \enable_1
+	ALT_NEW_CONTENT \vendor_id_2, \errata_id_2, \errata_not_2, \enable_2, \new_c_2
 .endm
 
 #define __ALTERNATIVE_CFG(...)		ALTERNATIVE_CFG __VA_ARGS__
@@ -58,17 +59,18 @@
 #include <asm/asm.h>
 #include <linux/stringify.h>
 
-#define ALT_ENTRY(oldptr, newptr, vendor_id, errata_id, newlen)		\
+#define ALT_ENTRY(oldptr, newptr, newlen, vendor_id, errata_id, errata_not) \
 	RISCV_PTR " " oldptr "\n"					\
 	RISCV_PTR " " newptr "\n"					\
 	REG_ASM " " vendor_id "\n"					\
 	REG_ASM " " newlen "\n"						\
-	".word " errata_id "\n"
+	".word " errata_id "\n"						\
+	".word " errata_not "\n"
 
-#define ALT_NEW_CONTENT(vendor_id, errata_id, enable, new_c)		\
+#define ALT_NEW_CONTENT(vendor_id, errata_id, errata_not, enable, new_c) \
 	".if " __stringify(enable) " == 1\n"				\
 	".pushsection .alternative, \"a\"\n"				\
-	ALT_ENTRY("886b", "888f", __stringify(vendor_id), __stringify(errata_id), "889f - 888f") \
+	ALT_ENTRY("886b", "888f", "889f - 888f", __stringify(vendor_id), __stringify(errata_id), __stringify(errata_not)) \
 	".popsection\n"							\
 	".subsection 1\n"						\
 	"888 :\n"							\
@@ -83,7 +85,7 @@
 	".previous\n"							\
 	".endif\n"
 
-#define __ALTERNATIVE_CFG(old_c, new_c, vendor_id, errata_id, enable)	\
+#define __ALTERNATIVE_CFG(old_c, new_c, vendor_id, errata_id, errata_not, enable) \
 	"886 :\n"							\
 	".option push\n"						\
 	".option norvc\n"						\
@@ -91,22 +93,22 @@
 	old_c "\n"							\
 	".option pop\n"							\
 	"887 :\n"							\
-	ALT_NEW_CONTENT(vendor_id, errata_id, enable, new_c)
+	ALT_NEW_CONTENT(vendor_id, errata_id, errata_not, enable, new_c)
 
-#define __ALTERNATIVE_CFG_2(old_c, new_c_1, vendor_id_1, errata_id_1, enable_1,	\
-				   new_c_2, vendor_id_2, errata_id_2, enable_2)	\
-	__ALTERNATIVE_CFG(old_c, new_c_1, vendor_id_1, errata_id_1, enable_1)	\
-	ALT_NEW_CONTENT(vendor_id_2, errata_id_2, enable_2, new_c_2)
+#define __ALTERNATIVE_CFG_2(old_c, new_c_1, vendor_id_1, errata_id_1, errata_not_1, enable_1,	\
+				   new_c_2, vendor_id_2, errata_id_2, errata_not_2, enable_2)	\
+	__ALTERNATIVE_CFG(old_c, new_c_1, vendor_id_1, errata_id_1, errata_not_1, enable_1)	\
+	ALT_NEW_CONTENT(vendor_id_2, errata_id_2, errata_not_2, enable_2, new_c_2)
 
 #endif /* __ASSEMBLY__ */
 
-#define _ALTERNATIVE_CFG(old_c, new_c, vendor_id, errata_id, CONFIG_k)	\
-	__ALTERNATIVE_CFG(old_c, new_c, vendor_id, errata_id, IS_ENABLED(CONFIG_k))
+#define _ALTERNATIVE_CFG(old_c, new_c, vendor_id, errata_id, errata_not, CONFIG_k)	\
+	__ALTERNATIVE_CFG(old_c, new_c, vendor_id, errata_id, errata_not, IS_ENABLED(CONFIG_k))
 
-#define _ALTERNATIVE_CFG_2(old_c, new_c_1, vendor_id_1, errata_id_1, CONFIG_k_1,		\
-				  new_c_2, vendor_id_2, errata_id_2, CONFIG_k_2)		\
-	__ALTERNATIVE_CFG_2(old_c, new_c_1, vendor_id_1, errata_id_1, IS_ENABLED(CONFIG_k_1),	\
-				   new_c_2, vendor_id_2, errata_id_2, IS_ENABLED(CONFIG_k_2))
+#define _ALTERNATIVE_CFG_2(old_c, new_c_1, vendor_id_1, errata_id_1, errata_not_1, CONFIG_k_1,		\
+				  new_c_2, vendor_id_2, errata_id_2, errata_not_2, CONFIG_k_2)		\
+	__ALTERNATIVE_CFG_2(old_c, new_c_1, vendor_id_1, errata_id_1, errata_not_1, IS_ENABLED(CONFIG_k_1),	\
+				   new_c_2, vendor_id_2, errata_id_2, errata_not_2, IS_ENABLED(CONFIG_k_2))
 
 #else /* CONFIG_RISCV_ALTERNATIVE */
 #ifdef __ASSEMBLY__
@@ -148,8 +150,8 @@
  * CONFIG_k: The Kconfig of this errata. When Kconfig is disabled, the old
  *	     content will alwyas be executed.
  */
-#define ALTERNATIVE(old_content, new_content, vendor_id, errata_id, CONFIG_k) \
-	_ALTERNATIVE_CFG(old_content, new_content, vendor_id, errata_id, CONFIG_k)
+#define ALTERNATIVE(old_content, new_content, vendor_id, errata_id, errata_not, CONFIG_k) \
+	_ALTERNATIVE_CFG(old_content, new_content, vendor_id, errata_id, errata_not, CONFIG_k)
 
 /*
  * A vendor wants to replace an old_content, but another vendor has used
@@ -158,9 +160,9 @@
  * on the following sample code and then replace ALTERNATIVE() with
  * ALTERNATIVE_2() to append its customized content.
  */
-#define ALTERNATIVE_2(old_content, new_content_1, vendor_id_1, errata_id_1, CONFIG_k_1,		\
-				   new_content_2, vendor_id_2, errata_id_2, CONFIG_k_2)		\
-	_ALTERNATIVE_CFG_2(old_content, new_content_1, vendor_id_1, errata_id_1, CONFIG_k_1,	\
-					new_content_2, vendor_id_2, errata_id_2, CONFIG_k_2)
+#define ALTERNATIVE_2(old_content, new_content_1, vendor_id_1, errata_id_1, errata_not_1, CONFIG_k_1,		\
+				   new_content_2, vendor_id_2, errata_id_2, errata_not_2, CONFIG_k_2)		\
+	_ALTERNATIVE_CFG_2(old_content, new_content_1, vendor_id_1, errata_id_1, errata_not_1, CONFIG_k_1,	\
+					new_content_2, vendor_id_2, errata_id_2, errata_not_2, CONFIG_k_2)
 
 #endif
