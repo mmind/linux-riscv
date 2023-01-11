@@ -22,10 +22,11 @@
 #define	ERRATA_THEAD_NUMBER 3
 #endif
 
-#define	CPUFEATURE_SVPBMT 	(1 << 0)
-#define	CPUFEATURE_ZICBOM	(1 << 1)
-#define	CPUFEATURE_ZBB		(1 << 2)
-#define	CPUFEATURE_NUMBER 3
+#define	CPUFEATURE_SVPBMT 		(1 << 0)
+#define	CPUFEATURE_ZICBOM		(1 << 1)
+#define	CPUFEATURE_ZBB			(1 << 2)
+#define	CPUFEATURE_FAST_UNALIGNED	(1 << 3)
+#define	CPUFEATURE_NUMBER		4
 
 #ifdef __ASSEMBLY__
 

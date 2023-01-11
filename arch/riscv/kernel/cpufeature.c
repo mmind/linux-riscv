@@ -337,6 +337,23 @@ static bool __init_or_module cpufeature_probe_zbb(unsigned int stage)
 	return true;
 }
 
+static bool __init_or_module cpufeature_probe_fast_unaligned(unsigned int stage)
+{
+	int cpu;
+
+	if (stage == RISCV_ALTERNATIVES_EARLY_BOOT)
+		return false;
+
+	for_each_possible_cpu(cpu) {
+		long perf = per_cpu(misaligned_access_speed, cpu);
+
+		if (perf != RISCV_HWPROBE_MISALIGNED_FAST)
+			return false;
+	}
+
+	return true;
+}
+
 /*
  * Probe presence of individual extensions.
  *
@@ -357,6 +374,9 @@ static u32 __init_or_module cpufeature_probe(unsigned int stage)
 
 	if (cpufeature_probe_zbb(stage))
 		cpu_req_feature |= CPUFEATURE_ZBB;
+
+	if (cpufeature_probe_fast_unaligned(stage))
+		cpu_req_feature |= CPUFEATURE_FAST_UNALIGNED;
 
 	return cpu_req_feature;
 }
