@@ -344,6 +344,8 @@ static bool __init_or_module cpufeature_probe_fast_unaligned(unsigned int stage)
 	if (stage == RISCV_ALTERNATIVES_EARLY_BOOT)
 		return false;
 
+return true;
+
 	for_each_possible_cpu(cpu) {
 		long perf = per_cpu(misaligned_access_speed, cpu);
 
